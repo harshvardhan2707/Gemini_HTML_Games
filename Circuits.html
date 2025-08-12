@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Logic Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --canvas-bg: #2a2a2a;
+            --gate-bg: #4a4a4a;
+            --gate-border: #6a6a6a;
+            --text-color: #f0f0f0;
+            --wire-color: #ff6b6b;
+            --wire-off-color: #777;
+            --input-color: #4CAF50;
+            --output-color: #2196F3;
+            --selection-color: rgba(46, 139, 87, 0.3);
+            --selection-border: #2E8B57;
+            --wire-active-color: #f9ca24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+        .gate {
+            cursor: move;
+            user-select: none;
+            position: absolute;
+            background-color: var(--gate-bg);
+            border: 1px solid var(--gate-border);
+            border-radius: 10px;
+            padding: 12px 24px;
+            min-width: 100px;
+            min-height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: box-shadow 0.2s ease;
+        }
+        .gate:hover {
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        .gate.selected {
+            border-color: var(--selection-border);
+            box-shadow: 0 0 10px var(--selection-border);
+        }
+        .gate-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        .port {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background-color: #fff;
+            border: 2px solid var(--gate-border);
+            border-radius: 50%;
+            cursor: crosshair;
+            z-index: 10;
+        }
+        .port.input { left: -8px; }
+        .port.output { right: -8px; }
+        .port.input:nth-child(2) { top: 12px; }
+        .port.input:nth-child(3) { top: 36px; }
+        .port.input:nth-child(4) { top: 60px; }
+        .port.input:nth-child(5) { top: 84px; }
+        
+        .io-node {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid var(--gate-border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .io-node.input { background-color: var(--input-color); }
+        .io-node.output { background-color: var(--output-color); }
+        .io-node.on { box-shadow: 0 0 10px 3px #ffeb3b; }
+        .io-node .port {
+            width: 100%;
+            height: 100%;
+            left: 0;
+            top: 0;
+            background: transparent;
+            border: none;
+        }
+        .io-label {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-weight: 500;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .io-node.input .io-label { left: 30px; }
+        .io-node.output .io-label { right: 30px; }
+
+        #selection-box {
+            position: absolute;
+            border: 1px dashed var(--selection-border);
+            background-color: var(--selection-color);
+            pointer-events: none;
+        }
+        
+        .custom-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: var(--canvas-bg);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--gate-border);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+            width: 90%;
+            max-width: 400px;
+        }
+        .custom-alert {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #ff6b6b;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="flex h-screen">
+
+    <!-- Palette -->
+    <div id="palette" class="w-48 bg-gray-800 p-4 space-y-3 overflow-y-auto">
+        <h2 class="text-lg font-bold text-center">Components</h2>
+        <div class="space-y-2" id="gate-palette"></div>
+        <div class="pt-4 border-t border-gray-700">
+             <h3 class="text-md font-bold text-center mb-2">Circuit Actions</h3>
+             <button id="save-circuit-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Save Selection</button>
+             <button id="delete-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors mt-2">Delete</button>
+        </div>
+        <div class="pt-4 border-t border-gray-700">
+             <h3 class="text-md font-bold text-center mb-2">I/O</h3>
+             <button id="add-input-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add Input</button>
+             <button id="add-output-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors mt-2">Add Output</button>
+        </div>
+    </div>
+
+    <!-- Canvas -->
+    <div id="canvas-container" class="flex-1 bg-gray-900 relative overflow-hidden">
+        <svg id="canvas-svg" class="w-full h-full absolute top-0 left-0"></svg>
+        <div id="canvas" class="w-full h-full relative"></div>
+        <div id="selection-box" style="display: none;"></div>
+        <div id="custom-alert" class="custom-alert"></div>
+    </div>
+
+    <!-- Save Modal -->
+    <div id="save-modal" class="custom-modal hidden">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4">Save Custom Gate</h3>
+            <p class="mb-4">Enter a name for your new component.</p>
+            <input type="text" id="gate-name-input" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 mb-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="e.g., AND_Gate">
+            <div class="flex justify-end space-x-2">
+                <button id="cancel-save-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Cancel</button>
+                <button id="confirm-save-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM Elements ---
+        const canvas = document.getElementById('canvas');
+        const canvasSvg = document.getElementById('canvas-svg');
+        const palette = document.getElementById('gate-palette');
+        const selectionBoxElement = document.getElementById('selection-box');
+        const alertBox = document.getElementById('custom-alert');
+        
+        // --- State ---
+        let gates = {};
+        let wires = {};
+        let customGateDefs = {};
+        let nextId = 0;
+        let selectedItems = new Set();
+        let wireStartPoint = null;
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        let draggedElement = null;
+        let isSelecting = false;
+        let selectionStart = { x: 0, y: 0 };
+        
+        // --- Naming and Positioning State ---
+        let nextInputY = 50;
+        let nextOutputY = 50;
+        let availableInputNames = [];
+        let nextInputNameCode = 65; // 'A'
+        let inputNameRepeatCount = 1;
+        let nextOutputId = 1;
+
+        // --- History (Undo/Redo) State ---
+        let history = [];
+        let historyIndex = -1;
+        
+        // --- Core Logic Functions ---
+
+        function showAlert(message) {
+            alertBox.textContent = message;
+            alertBox.style.opacity = 1;
+            setTimeout(() => { alertBox.style.opacity = 0; }, 3000);
+        }
+
+        function generateInputName() {
+            if (availableInputNames.length > 0) {
+                availableInputNames.sort();
+                return availableInputNames.shift();
+            }
+            if (nextInputNameCode > 90) {
+                nextInputNameCode = 65;
+                inputNameRepeatCount++;
+            }
+            const name = String.fromCharCode(nextInputNameCode).repeat(inputNameRepeatCount);
+            nextInputNameCode++;
+            return name;
+        }
+
+        function calculateGateOutput(gate) {
+            const inputs = gate.inputs.map(port => port.value);
+            switch (gate.type) {
+                case 'INPUT': return gate.value;
+                case 'NAND': return (inputs.includes(0)) ? 1 : 0;
+                default: return 0; // Should not happen for basic gates
+            }
+        }
+        
+        function simulate() {
+            Object.values(wires).forEach(w => w.value = 0);
+            Object.values(gates).forEach(g => g.inputs.forEach(p => p.value = 0));
+            
+            for (let i = 0; i < 50; i++) {
+                let changed = false;
+                
+                Object.values(gates).forEach(gate => {
+                    gate.inputs.forEach(inputPort => {
+                        const wire = Object.values(wires).find(w => w.to.gateId === gate.id && w.to.portId === inputPort.id);
+                        if (wire) {
+                            const sourceGate = gates[wire.from.gateId];
+                            const sourcePort = sourceGate.outputs.find(p => p.id === wire.from.portId);
+                            if (sourceGate && sourcePort) inputPort.value = sourcePort.value;
+                        }
+                    });
+                });
+
+                Object.values(gates).forEach(gate => {
+                    if (gate.type === 'OUTPUT') return;
+
+                    let newOutputValues;
+                    if (gate.type.startsWith('CUSTOM_')) {
+                        newOutputValues = calculateCustomGateOutput(gate);
+                    } else {
+                        const val = calculateGateOutput(gate);
+                        newOutputValues = gate.outputs.map(() => val);
+                    }
+                    
+                    gate.outputs.forEach((outputPort, index) => {
+                        const newValue = newOutputValues[index];
+                        if (outputPort.value !== newValue) {
+                            outputPort.value = newValue;
+                            changed = true;
+                        }
+                    });
+                });
+                if (!changed) break; 
+            }
+            
+            Object.values(wires).forEach(wire => {
+                const sourceGate = gates[wire.from.gateId];
+                if (sourceGate && sourceGate.outputs) {
+                    const sourcePort = sourceGate.outputs.find(p => p.id === wire.from.portId);
+                    if (sourcePort) wire.value = sourcePort.value;
+                }
+            });
+
+            redrawWires();
+            updateOutputNodes();
+        }
+
+        function calculateCustomGateOutput(gate) {
+            const def = customGateDefs[gate.type];
+            if (!def) return [];
+            const internalState = {};
+
+            def.components.forEach(compDef => {
+                internalState[compDef.id] = {
+                    ...compDef,
+                    inputs: compDef.inputs.map(p => ({ ...p, value: 0 })),
+                    outputs: compDef.outputs.map(p => ({ ...p, value: 0 })),
+                    value: 0
+                };
+            });
+
+            gate.inputs.forEach((mainInput, index) => {
+                const destinations = def.io.inputs[index] || [];
+                destinations.forEach(mapping => {
+                    const targetGate = internalState[mapping.gateId];
+                    if (targetGate) {
+                        const targetPort = targetGate.inputs.find(p => p.id === mapping.portId);
+                        if(targetPort) targetPort.value = mainInput.value;
+                    }
+                });
+            });
+
+            for (let i = 0; i < 20; i++) {
+                let changed = false;
+                def.wires.forEach(wire => {
+                    const sourceGate = internalState[wire.from.gateId];
+                    const destGate = internalState[wire.to.gateId];
+                    if (sourceGate && destGate) {
+                        const destPort = destGate.inputs.find(p => p.id === wire.to.portId);
+                        const sourcePort = sourceGate.outputs.find(p => p.id === wire.from.portId);
+                        if (destPort && sourcePort) destPort.value = sourcePort.value;
+                    }
+                });
+                def.components.forEach(compDef => {
+                    const internalGate = internalState[compDef.id];
+                    const oldValues = internalGate.outputs.map(p => p.value);
+                    const newValues = [calculateGateOutput(internalGate)];
+                    
+                    internalGate.outputs.forEach((outputPort, index) => {
+                        if (oldValues[index] !== newValues[index]) {
+                            outputPort.value = newValues[index];
+                            changed = true;
+                        }
+                    });
+                });
+                if (!changed) break;
+            }
+
+            return def.io.outputs.map(outputMapping => {
+                const outputGate = internalState[outputMapping.gateId];
+                const sourcePort = outputGate.outputs.find(p => p.id === outputMapping.portId);
+                return sourcePort ? sourcePort.value : 0;
+            });
+        }
+
+        // --- UI and Rendering ---
+
+        function renderGate(gate) {
+            const gateEl = document.createElement('div');
+            gateEl.id = gate.id;
+            gateEl.style.left = `${gate.x}px`;
+            gateEl.style.top = `${gate.y}px`;
+            let content = '';
+
+            if (gate.type === 'INPUT' || gate.type === 'OUTPUT') {
+                gateEl.className = 'io-node ' + gate.type.toLowerCase();
+                if (gate.value === 1) gateEl.classList.add('on');
+                if (gate.type === 'INPUT') {
+                    content = `<div class="port output" data-port-id="${gate.outputs[0].id}" data-gate-id="${gate.id}"></div><div class="io-label">${gate.name}</div>`;
+                    gateEl.addEventListener('click', (e) => {
+                        if (!e.target.classList.contains('port')) {
+                            saveState();
+                            gate.value = 1 - gate.value;
+                            gate.outputs[0].value = gate.value;
+                            gateEl.classList.toggle('on');
+                            simulate();
+                        }
+                    });
+                } else { // OUTPUT
+                    content = `<div class="port input" data-port-id="${gate.inputs[0].id}" data-gate-id="${gate.id}"></div><div class="io-label">${gate.name}</div>`;
+                }
+            } else {
+                gateEl.className = 'gate';
+                let gateHeight = Math.max(60, gate.inputs.length * 24 + 12, gate.outputs.length * 24 + 12);
+                gateEl.style.minHeight = `${gateHeight}px`;
+
+                content = `<div class="gate-name">${gate.type.replace('CUSTOM_', '')}</div>`;
+
+                gate.inputs.forEach((port, index) => { 
+                    const portEl = document.createElement('div');
+                    portEl.className = 'port input';
+                    portEl.dataset.portId = port.id;
+                    portEl.dataset.gateId = gate.id;
+                    const totalHeight = gate.inputs.length * 24;
+                    const startY = (gateHeight - totalHeight) / 2;
+                    portEl.style.top = `${startY + 12 + index * 24}px`;
+                    content += portEl.outerHTML;
+                });
+                gate.outputs.forEach((port, index) => { 
+                    const portEl = document.createElement('div');
+                    portEl.className = 'port output';
+                    portEl.dataset.portId = port.id;
+                    portEl.dataset.gateId = gate.id;
+                    const totalHeight = gate.outputs.length * 24;
+                    const startY = (gateHeight - totalHeight) / 2;
+                    portEl.style.top = `${startY + 12 + index * 24}px`;
+                    content += portEl.outerHTML;
+                });
+            }
+            gateEl.innerHTML = content;
+            canvas.appendChild(gateEl);
+            gateEl.addEventListener('mousedown', onGateMouseDown);
+            gateEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (e.target.classList.contains('port')) { onPortClick(e); return; }
+                if (e.ctrlKey || e.metaKey) { toggleSelection(gate.id); } 
+                else {
+                    if (!isDragging) {
+                        clearSelection();
+                        addToSelection(gate.id);
+                    }
+                }
+            });
+        }
+        
+        function redrawWires() {
+            canvasSvg.innerHTML = ''; 
+            if (wireStartPoint && wireStartPoint.path) canvasSvg.appendChild(wireStartPoint.path);
+            Object.values(wires).forEach(wire => {
+                const fromGateEl = document.getElementById(wire.from.gateId);
+                const toGateEl = document.getElementById(wire.to.gateId);
+                if (!fromGateEl || !toGateEl) return;
+                const fromPortEl = fromGateEl.querySelector(`[data-port-id="${wire.from.portId}"]`);
+                const toPortEl = toGateEl.querySelector(`[data-port-id="${wire.to.portId}"]`);
+                if (!fromPortEl || !toPortEl) return;
+                const canvasRect = canvas.getBoundingClientRect();
+                const fromRect = fromPortEl.getBoundingClientRect();
+                const toRect = toPortEl.getBoundingClientRect();
+                const x1 = fromRect.left + fromRect.width / 2 - canvasRect.left;
+                const y1 = fromRect.top + fromRect.height / 2 - canvasRect.top;
+                const x2 = toRect.left + toRect.width / 2 - canvasRect.left;
+                const y2 = toRect.top + toRect.height / 2 - canvasRect.top;
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const d = `M ${x1} ${y1} C ${x1 + 60} ${y1}, ${x2 - 60} ${y2}, ${x2} ${y2}`;
+                path.setAttribute('d', d);
+                path.setAttribute('stroke', wire.value === 1 ? 'var(--wire-color)' : 'var(--wire-off-color)');
+                path.setAttribute('stroke-width', '3');
+                path.setAttribute('fill', 'none');
+                path.id = wire.id;
+                canvasSvg.appendChild(path);
+            });
+        }
+        
+        function updateOutputNodes() {
+            Object.values(gates).filter(g => g.type === 'OUTPUT').forEach(g => {
+                const inputWire = Object.values(wires).find(w => w.to.gateId === g.id);
+                g.value = inputWire ? inputWire.value : 0;
+                const el = document.getElementById(g.id);
+                if (el) {
+                    if (g.value === 1) el.classList.add('on');
+                    else el.classList.remove('on');
+                }
+            });
+        }
+
+        function updatePalette() {
+            palette.innerHTML = '';
+            const basicGates = [{ type: 'NAND', inputs: 2, outputs: 1 }];
+            [...basicGates, ...Object.values(customGateDefs)].forEach(def => {
+                const gateButton = document.createElement('div');
+                gateButton.className = 'gate-button bg-gray-700 p-2 rounded-lg text-center cursor-pointer hover:bg-gray-600 transition-colors';
+                gateButton.textContent = def.type.replace('CUSTOM_', '');
+                gateButton.draggable = true;
+                gateButton.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', def.type); });
+                palette.appendChild(gateButton);
+            });
+        }
+        
+        function onGateMouseDown(e) {
+            if (e.target.classList.contains('port')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            draggedElement = e.currentTarget;
+            isDragging = true;
+            const gateId = draggedElement.id;
+            if (!selectedItems.has(gateId)) {
+                if (!e.ctrlKey && !e.metaKey) clearSelection();
+                addToSelection(gateId);
+            }
+            dragOffset = { x: e.clientX, y: e.clientY };
+            selectedItems.forEach(id => {
+                const el = document.getElementById(id);
+                gates[id].dragStart = { x: el.offsetLeft, y: el.offsetTop };
+            });
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        }
+
+        function onMouseMove(e) {
+            if (isDragging && draggedElement) {
+                const dx = e.clientX - dragOffset.x;
+                const dy = e.clientY - dragOffset.y;
+                selectedItems.forEach(id => {
+                    const el = document.getElementById(id);
+                    const gate = gates[id];
+                    if (gate.type === 'INPUT' || gate.type === 'OUTPUT') return;
+                    const newX = gate.dragStart.x + dx;
+                    const newY = gate.dragStart.y + dy;
+                    el.style.left = `${newX}px`;
+                    el.style.top = `${newY}px`;
+                    gate.x = newX;
+                    gate.y = newY;
+                });
+                redrawWires();
+            } else if (wireStartPoint) {
+                const canvasRect = canvas.getBoundingClientRect();
+                const x2 = e.clientX - canvasRect.left;
+                const y2 = e.clientY - canvasRect.top;
+                const {x1, y1} = wireStartPoint;
+                wireStartPoint.path.setAttribute('d', `M ${x1} ${y1} C ${x1 + 60} ${y1}, ${x2 - 60} ${y2}, ${x2} ${y2}`);
+            } else if (isSelecting) {
+                const canvasRect = canvas.getBoundingClientRect();
+                const currentX = e.clientX - canvasRect.left;
+                const currentY = e.clientY - canvasRect.top;
+                const x = Math.min(selectionStart.x, currentX);
+                const y = Math.min(selectionStart.y, currentY);
+                const width = Math.abs(currentX - selectionStart.x);
+                const height = Math.abs(currentY - selectionStart.y);
+                selectionBoxElement.style.left = `${x}px`;
+                selectionBoxElement.style.top = `${y}px`;
+                selectionBoxElement.style.width = `${width}px`;
+                selectionBoxElement.style.height = `${height}px`;
+            }
+        }
+
+        function onMouseUp(e) {
+            if (isDragging) {
+                saveState();
+                setTimeout(() => { isDragging = false; }, 0);
+            }
+            draggedElement = null;
+            if(isSelecting) {
+                isSelecting = false;
+                selectionBoxElement.style.display = 'none';
+                selectItemsInBox();
+            }
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        }
+        
+        function onPortClick(e) {
+            e.stopPropagation();
+            const portEl = e.target;
+            const gateId = portEl.dataset.gateId;
+            const portId = portEl.dataset.portId;
+            const isOutputPort = portEl.classList.contains('output');
+
+            if (!wireStartPoint) {
+                const canvasRect = canvas.getBoundingClientRect();
+                const portRect = portEl.getBoundingClientRect();
+                const x1 = portRect.left + portRect.width / 2 - canvasRect.left;
+                const y1 = portRect.top + portRect.height / 2 - canvasRect.top;
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('stroke', 'var(--wire-active-color)');
+                path.setAttribute('stroke-width', '3');
+                path.setAttribute('fill', 'none');
+                canvasSvg.appendChild(path);
+                wireStartPoint = { path, gateId, portId, isOutput: isOutputPort, x1, y1 };
+                document.addEventListener('mousemove', onMouseMove);
+            } else {
+                let from, to;
+                if (wireStartPoint.isOutput && !isOutputPort) { from = { gateId: wireStartPoint.gateId, portId: wireStartPoint.portId }; to = { gateId, portId }; } 
+                else if (!wireStartPoint.isOutput && isOutputPort) { from = { gateId, portId }; to = { gateId: wireStartPoint.gateId, portId: wireStartPoint.portId }; } 
+                else { showAlert("Cannot connect these port types."); cancelWiring(); return; }
+                if (from.gateId === to.gateId) { showAlert("Cannot connect a gate to itself."); cancelWiring(); return; }
+                
+                saveState();
+                const newWireId = `wire-${nextId++}`;
+                wires[newWireId] = { id: newWireId, from, to, value: 0 };
+                cancelWiring();
+                simulate();
+            }
+        }
+        
+        function cancelWiring() {
+            if (wireStartPoint) {
+                if(wireStartPoint.path) canvasSvg.removeChild(wireStartPoint.path);
+                wireStartPoint = null;
+                document.removeEventListener('mousemove', onMouseMove);
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.target.id === 'canvas' || e.target.id === 'canvas-svg') {
+                if (wireStartPoint) { cancelWiring(); return; }
+                if (!e.ctrlKey && !e.metaKey) clearSelection();
+                isSelecting = true;
+                const canvasRect = canvas.getBoundingClientRect();
+                selectionStart.x = e.clientX - canvasRect.left;
+                selectionStart.y = e.clientY - canvasRect.top;
+                selectionBoxElement.style.left = `${selectionStart.x}px`;
+                selectionBoxElement.style.top = `${selectionStart.y}px`;
+                selectionBoxElement.style.width = '0px';
+                selectionBoxElement.style.height = '0px';
+                selectionBoxElement.style.display = 'block';
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            }
+        });
+
+        canvas.addEventListener('dragover', (e) => e.preventDefault());
+        canvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            saveState();
+            const type = e.dataTransfer.getData('text/plain');
+            const canvasRect = canvas.getBoundingClientRect();
+            const x = e.clientX - canvasRect.left;
+            const y = e.clientY - canvasRect.top;
+            createGate(type, x, y);
+        });
+
+        function createGate(type, x, y, isHistoryAction = false) {
+            if(!isHistoryAction) saveState();
+            const id = `gate-${nextId++}`;
+            let newGate = { id, type, x, y, inputs: [], outputs: [] };
+
+            if (type === 'INPUT') {
+                 newGate.value = 0;
+                 newGate.name = generateInputName();
+                 newGate.outputs.push({ id: `p-out-${nextId++}`, value: 0 });
+                 newGate.x = 50;
+                 newGate.y = nextInputY;
+                 nextInputY += 60;
+            } else if (type === 'OUTPUT') {
+                 newGate.value = 0;
+                 newGate.name = `OUT${nextOutputId++}`;
+                 newGate.inputs.push({ id: `p-in-${nextId++}`, value: 0 });
+                 const canvasRect = canvas.getBoundingClientRect();
+                 newGate.x = canvasRect.width - 50;
+                 newGate.y = nextOutputY;
+                 nextOutputY += 60;
+            } else if (customGateDefs[type]) {
+                const gateDef = customGateDefs[type];
+                for (let i = 0; i < gateDef.inputs; i++) newGate.inputs.push({ id: `p-in-${nextId++}`, value: 0 });
+                for (let i = 0; i < gateDef.outputs; i++) newGate.outputs.push({ id: `p-out-${nextId++}`, value: 0 });
+            } else { // Basic gates
+                let numInputs = (type === 'NOT') ? 1 : 2;
+                for (let i = 0; i < numInputs; i++) newGate.inputs.push({ id: `p-in-${nextId++}`, value: 0 });
+                newGate.outputs.push({ id: `p-out-${nextId++}`, value: 0 });
+            }
+            gates[id] = newGate;
+            renderGate(newGate);
+            return newGate;
+        }
+
+        function saveCurrentSelection() {
+            const gateNameInput = document.getElementById('gate-name-input');
+            const name = `CUSTOM_${gateNameInput.value.trim().toUpperCase().replace(/\s+/g, '_')}`;
+            if (!name || name === 'CUSTOM_') { showAlert("Please enter a valid name."); return; }
+            if (customGateDefs[name] || ['NAND', 'INPUT', 'OUTPUT'].includes(name.replace('CUSTOM_', ''))) { showAlert("This name is already in use."); return; }
+            
+            saveState();
+
+            const selection = Array.from(selectedItems);
+            const internalInputNodes = selection.map(id => gates[id]).filter(g => g.type === 'INPUT').sort((a,b) => a.y - b.y);
+            const internalOutputNodes = selection.map(id => gates[id]).filter(g => g.type === 'OUTPUT').sort((a,b) => a.y - b.y);
+            const internalLogicGates = selection.map(id => gates[id]).filter(g => g.type !== 'INPUT' && g.type !== 'OUTPUT');
+            const internalLogicIds = internalLogicGates.map(g => g.id);
+
+            if (internalInputNodes.length === 0 && internalOutputNodes.length === 0) {
+                showAlert("Selection must include at least one INPUT or OUTPUT node to define the component's interface.");
+                return;
+            }
+
+            const ioInputs = internalInputNodes.map(inputNode => {
+                return Object.values(wires)
+                    .filter(wire => wire.from.gateId === inputNode.id)
+                    .map(wire => wire.to);
+            });
+            
+            const ioOutputs = internalOutputNodes.map(outputNode => {
+                const sourceWire = Object.values(wires).find(wire => wire.to.gateId === outputNode.id);
+                return sourceWire ? sourceWire.from : null;
+            }).filter(Boolean);
+            
+            const internalWires = Object.values(wires).filter(w => 
+                internalLogicIds.includes(w.from.gateId) && internalLogicIds.includes(w.to.gateId)
+            );
+
+            customGateDefs[name] = {
+                name: name, type: name, 
+                inputs: internalInputNodes.length,
+                outputs: internalOutputNodes.length,
+                components: internalLogicGates.map(g => ({ id: g.id, type: g.type, inputs: g.inputs, outputs: g.outputs })),
+                wires: internalWires,
+                io: { inputs: ioInputs, outputs: ioOutputs }
+            };
+            
+            const avgPos = selection.map(id => gates[id]).reduce((acc, g) => ({x: acc.x + g.x, y: acc.y + g.y}), {x:0, y:0});
+            avgPos.x /= selection.length;
+            avgPos.y /= selection.length;
+
+            selection.forEach(id => deleteGate(id, true));
+            createGate(name, avgPos.x, avgPos.y, true);
+
+            updatePalette(); 
+            simulate(); 
+            closeSaveModal(); 
+            clearSelection();
+        }
+        
+        function deleteGate(gateId, isInternalAction = false) {
+            const gate = gates[gateId];
+            if (gate) {
+                if (gate.type === 'INPUT') {
+                    nextInputY -= 60;
+                    availableInputNames.push(gate.name);
+                }
+                if (gate.type === 'OUTPUT') nextOutputY -= 60;
+            }
+            delete gates[gateId];
+            Object.values(wires).forEach(w => {
+                if (w.from.gateId === gateId || w.to.gateId === gateId) delete wires[w.id];
+            });
+        }
+
+        function deleteSelected() {
+            if (selectedItems.size === 0) return;
+            saveState();
+            selectedItems.forEach(id => { if (gates[id]) deleteGate(id, true); });
+            clearSelection();
+            fullRender();
+            simulate();
+        }
+
+        // --- Selection Management ---
+        function clearSelection() {
+            selectedItems.forEach(id => document.getElementById(id)?.classList.remove('selected'));
+            selectedItems.clear();
+        }
+        function addToSelection(id) {
+            if (gates[id]) {
+                selectedItems.add(id);
+                document.getElementById(id)?.classList.add('selected');
+            }
+        }
+        function toggleSelection(id) {
+            if (selectedItems.has(id)) {
+                selectedItems.delete(id);
+                document.getElementById(id)?.classList.remove('selected');
+            } else { addToSelection(id); }
+        }
+        function selectAll() {
+            clearSelection();
+            Object.keys(gates).forEach(id => addToSelection(id));
+        }
+        function selectItemsInBox() {
+            const boxRect = selectionBoxElement.getBoundingClientRect();
+            if (!isSelecting) clearSelection();
+            Object.values(gates).forEach(gate => {
+                const el = document.getElementById(gate.id);
+                if (el) {
+                    const elRect = el.getBoundingClientRect();
+                    if (!(boxRect.right < elRect.left || boxRect.left > elRect.right || boxRect.bottom < elRect.top || boxRect.top > elRect.bottom)) {
+                        addToSelection(gate.id);
+                    }
+                }
+            });
+        }
+        
+        // --- Modal ---
+        const saveModal = document.getElementById('save-modal');
+        function openSaveModal() {
+            if(selectedItems.size === 0) { showAlert("Please select components to save."); return; }
+            saveModal.classList.remove('hidden');
+        }
+        function closeSaveModal() {
+            saveModal.classList.add('hidden');
+            document.getElementById('gate-name-input').value = '';
+        }
+
+        // --- History Management ---
+        function saveState() {
+            history = history.slice(0, historyIndex + 1);
+            const state = {
+                gates: JSON.parse(JSON.stringify(gates)),
+                wires: JSON.parse(JSON.stringify(wires)),
+                customGateDefs: JSON.parse(JSON.stringify(customGateDefs)),
+                nextId, nextInputY, nextOutputY, availableInputNames: [...availableInputNames],
+                nextInputNameCode, inputNameRepeatCount, nextOutputId
+            };
+            history.push(state);
+            historyIndex++;
+        }
+
+        function restoreState(state) {
+            gates = state.gates;
+            wires = state.wires;
+            customGateDefs = state.customGateDefs;
+            nextId = state.nextId;
+            nextInputY = state.nextInputY;
+            nextOutputY = state.nextOutputY;
+            availableInputNames = state.availableInputNames;
+            nextInputNameCode = state.nextInputNameCode;
+            inputNameRepeatCount = state.inputNameRepeatCount;
+            nextOutputId = state.nextOutputId;
+            fullRender();
+        }
+        
+        function fullRender() {
+            canvas.innerHTML = '';
+            Object.values(gates).forEach(renderGate);
+            simulate();
+            updatePalette();
+        }
+
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                restoreState(JSON.parse(JSON.stringify(history[historyIndex])));
+            }
+        }
+
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                restoreState(JSON.parse(JSON.stringify(history[historyIndex])));
+            }
+        }
+
+        // --- Keyboard Shortcuts ---
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement.tagName === 'INPUT') return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                deleteSelected();
+            } else if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'a') { e.preventDefault(); selectAll(); } 
+                else if (e.key === 'z') { e.preventDefault(); undo(); } 
+                else if (e.key === 'y') { e.preventDefault(); redo(); }
+            }
+        });
+
+        // --- Initial Setup ---
+        function init() {
+            updatePalette();
+            document.getElementById('save-circuit-btn').addEventListener('click', openSaveModal);
+            document.getElementById('confirm-save-btn').addEventListener('click', saveCurrentSelection);
+            document.getElementById('cancel-save-btn').addEventListener('click', closeSaveModal);
+            document.getElementById('delete-btn').addEventListener('click', deleteSelected);
+            document.getElementById('add-input-btn').addEventListener('click', () => createGate('INPUT'));
+            document.getElementById('add-output-btn').addEventListener('click', () => createGate('OUTPUT'));
+            saveState();
+            simulate();
+        }
+
+        init();
+    });
+    </script>
+</body>
+</html>

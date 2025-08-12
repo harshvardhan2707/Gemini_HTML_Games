@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            touch-action: none; /* Disable double-tap to zoom on mobile */
+        }
+        canvas {
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.07) 2px, transparent 2px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.07) 2px, transparent 2px);
+            background-size: 20px 20px;
+        }
+        .touch-control-grid {
+            grid-template-areas:
+                ". up ."
+                "left . right"
+                ". down .";
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-lg mx-auto text-center">
+        <h1 class="text-3xl md:text-4xl font-bold mb-4 text-green-400">SNAKE</h1>
+        
+        <!-- Game Info: Score and Timer -->
+        <div class="flex justify-between items-center mb-4 text-lg">
+            <div>Score: <span id="score" class="text-yellow-300">0</span></div>
+            <div id="timer-container" class="hidden">
+                Apple Time: <span id="timer" class="text-red-400">5</span>s
+            </div>
+        </div>
+
+        <!-- Game Canvas -->
+        <div class="relative w-full" style="padding-bottom: 100%;"> <!-- Aspect ratio box -->
+             <canvas id="gameCanvas" class="absolute top-0 left-0 w-full h-full bg-gray-800 rounded-lg shadow-2xl border-4 border-gray-700"></canvas>
+             <!-- Game Over / Start Screen -->
+            <div id="game-overlay" class="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center bg-black bg-opacity-70 rounded-lg">
+                <div id="message-box" class="text-center">
+                    <h2 id="message-title" class="text-4xl font-bold text-yellow-300">Ready?</h2>
+                    <p id="message-text" class="mt-2 text-lg">Use Arrow Keys or Swipe to Move</p>
+                    <button id="start-button" class="mt-6 bg-green-500 hover:bg-green-600 text-gray-900 font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
+                        Start Game
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- On-Screen Controls for Mobile -->
+    <div class="mt-6 grid grid-cols-3 gap-2 w-48 md:hidden touch-control-grid">
+        <div style="grid-area: up;" class="flex justify-center">
+            <button id="up-btn" class="bg-gray-700 p-4 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+        </div>
+        <div style="grid-area: left;" class="flex justify-center">
+            <button id="left-btn" class="bg-gray-700 p-4 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+        </div>
+        <div style="grid-area: right;" class="flex justify-center">
+            <button id="right-btn" class="bg-gray-700 p-4 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+        <div style="grid-area: down;" class="flex justify-center">
+            <button id="down-btn" class="bg-gray-700 p-4 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const scoreElement = document.getElementById('score');
+            const timerContainer = document.getElementById('timer-container');
+            const timerElement = document.getElementById('timer');
+            const gameOverlay = document.getElementById('game-overlay');
+            const messageTitle = document.getElementById('message-title');
+            const messageText = document.getElementById('message-text');
+            const startButton = document.getElementById('start-button');
+
+            // --- Game Constants ---
+            const GRID_SIZE = 20; // Each cell is 20x20 pixels
+            const BIG_APPLE_SCORE_BONUS = 10;
+            const BIG_APPLE_TIMER_SECONDS = 5;
+            const SCORE_MILESTONE = 10;
+
+            // --- Game State Variables ---
+            let snake, food, bigApple, score, dx, dy, changingDirection, gameRunning, gameLoopTimeout, bigAppleInterval;
+            
+            // --- Canvas Sizing ---
+            function resizeCanvas() {
+                const container = canvas.parentElement;
+                const size = Math.min(container.clientWidth, container.clientHeight);
+                canvas.width = 400; // Keep internal resolution fixed
+                canvas.height = 400;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            const TILE_COUNT = canvas.width / GRID_SIZE;
+
+            // --- Initialization ---
+            function initializeGame() {
+                // Reset snake position and velocity
+                snake = [
+                    { x: TILE_COUNT / 2 * GRID_SIZE, y: TILE_COUNT / 2 * GRID_SIZE },
+                    { x: (TILE_COUNT / 2 - 1) * GRID_SIZE, y: TILE_COUNT / 2 * GRID_SIZE },
+                    { x: (TILE_COUNT / 2 - 2) * GRID_SIZE, y: TILE_COUNT / 2 * GRID_SIZE }
+                ];
+                dx = GRID_SIZE;
+                dy = 0;
+
+                // Reset game state
+                score = 0;
+                gameRunning = true;
+                changingDirection = false;
+                scoreElement.textContent = '0';
+                
+                // Reset special apple
+                bigApple = { x: -1, y: -1, active: false };
+                deactivateBigApple();
+                
+                // Generate initial food
+                generateFood();
+            }
+
+            // --- Game Loop ---
+            function main() {
+                if (!gameRunning) return;
+
+                gameLoopTimeout = setTimeout(() => {
+                    changingDirection = false;
+                    clearCanvas();
+                    drawFood();
+                    drawBigApple();
+                    moveSnake();
+                    drawSnake();
+                    main(); // Continue the loop
+                }, 100);
+            }
+
+            // --- Drawing Functions ---
+            function clearCanvas() {
+                ctx.fillStyle = '#1f2937'; // bg-gray-800
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            function drawSnake() {
+                snake.forEach((part, index) => {
+                    ctx.fillStyle = index === 0 ? '#4ade80' : '#16a34a'; // Lighter green for head
+                    ctx.strokeStyle = '#1f2937';
+                    ctx.fillRect(part.x, part.y, GRID_SIZE, GRID_SIZE);
+                    ctx.strokeRect(part.x, part.y, GRID_SIZE, GRID_SIZE);
+                });
+            }
+
+            function drawFood() {
+                if (bigApple.active) return; // Don't draw regular food if big apple is active
+                ctx.fillStyle = '#f87171'; // red-400
+                ctx.strokeStyle = '#dc2626'; // red-600
+                ctx.lineWidth = 2;
+                ctx.fillRect(food.x, food.y, GRID_SIZE, GRID_SIZE);
+                ctx.strokeRect(food.x, food.y, GRID_SIZE, GRID_SIZE);
+                ctx.lineWidth = 1;
+            }
+
+            function drawBigApple() {
+                if (!bigApple.active) return;
+                const radius = GRID_SIZE; // Make it bigger
+                ctx.fillStyle = 'gold';
+                ctx.beginPath();
+                ctx.arc(bigApple.x + GRID_SIZE / 2, bigApple.y + GRID_SIZE / 2, radius, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Draw a small leaf
+                ctx.fillStyle = '#4ade80';
+                ctx.beginPath();
+                ctx.moveTo(bigApple.x + GRID_SIZE, bigApple.y);
+                ctx.lineTo(bigApple.x + GRID_SIZE * 1.5, bigApple.y - GRID_SIZE * 0.5);
+                ctx.lineTo(bigApple.x + GRID_SIZE * 2, bigApple.y);
+                ctx.fill();
+            }
+
+            // --- Game Logic ---
+            function moveSnake() {
+                const head = { x: snake[0].x + dx, y: snake[0].y + dy };
+                snake.unshift(head);
+
+                if (checkGameOver(head)) {
+                    endGame();
+                    return;
+                }
+
+                const didEatFood = head.x === food.x && head.y === food.y;
+                const didEatBigApple = bigApple.active && head.x === bigApple.x && head.y === bigApple.y;
+
+                if (didEatBigApple) {
+                    score += BIG_APPLE_SCORE_BONUS;
+                    scoreElement.textContent = score;
+                    deactivateBigApple();
+                    generateFood(); // Generate new small food immediately
+                } else if (didEatFood) {
+                    score += 1;
+                    scoreElement.textContent = score;
+                    if (score > 0 && score % SCORE_MILESTONE === 0) {
+                        activateBigApple();
+                    } else {
+                        generateFood();
+                    }
+                } else {
+                    snake.pop();
+                }
+            }
+
+            function generateRandomCoord() {
+                return Math.floor(Math.random() * TILE_COUNT) * GRID_SIZE;
+            }
+
+            function generateFood() {
+                food = { x: generateRandomCoord(), y: generateRandomCoord() };
+                // Ensure food doesn't spawn on the snake
+                snake.forEach(part => {
+                    if (part.x === food.x && part.y === food.y) {
+                        generateFood();
+                    }
+                });
+            }
+
+            // --- Big Apple Logic ---
+            function activateBigApple() {
+                bigApple.active = true;
+                bigApple.x = generateRandomCoord();
+                bigApple.y = generateRandomCoord();
+                
+                // Ensure it doesn't spawn on the snake
+                snake.forEach(part => {
+                    if (part.x === bigApple.x && part.y === bigApple.y) {
+                        activateBigApple(); // Retry
+                        return;
+                    }
+                });
+
+                timerContainer.classList.remove('hidden');
+                let timeLeft = BIG_APPLE_TIMER_SECONDS;
+                timerElement.textContent = timeLeft;
+
+                bigAppleInterval = setInterval(() => {
+                    timeLeft--;
+                    timerElement.textContent = timeLeft;
+                    if (timeLeft <= 0) {
+                        deactivateBigApple();
+                        generateFood();
+                    }
+                }, 1000);
+            }
+
+            function deactivateBigApple() {
+                clearInterval(bigAppleInterval);
+                bigApple.active = false;
+                timerContainer.classList.add('hidden');
+            }
+
+            // --- Collision & Game Over ---
+            function checkGameOver(head) {
+                // Check wall collision
+                if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height) {
+                    return true;
+                }
+                // Check self collision
+                for (let i = 4; i < snake.length; i++) {
+                    if (head.x === snake[i].x && head.y === snake[i].y) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            function endGame() {
+                gameRunning = false;
+                clearTimeout(gameLoopTimeout);
+                deactivateBigApple(); // Clear any active timers
+                gameOverlay.style.display = 'flex';
+                messageTitle.textContent = 'Game Over!';
+                messageText.textContent = `Final Score: ${score}`;
+                startButton.textContent = 'Restart Game';
+            }
+
+            // --- Controls ---
+            function changeDirection(event) {
+                if (changingDirection) return;
+                changingDirection = true;
+
+                const keyPressed = event.key;
+                const goingUp = dy === -GRID_SIZE;
+                const goingDown = dy === GRID_SIZE;
+                const goingRight = dx === GRID_SIZE;
+                const goingLeft = dx === -GRID_SIZE;
+
+                if (keyPressed === 'ArrowLeft' && !goingRight) { dx = -GRID_SIZE; dy = 0; }
+                if (keyPressed === 'ArrowUp' && !goingDown) { dx = 0; dy = -GRID_SIZE; }
+                if (keyPressed === 'ArrowRight' && !goingLeft) { dx = GRID_SIZE; dy = 0; }
+                if (keyPressed === 'ArrowDown' && !goingUp) { dx = 0; dy = GRID_SIZE; }
+            }
+            
+            // Touch controls
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let touchEndX = 0;
+            let touchEndY = 0;
+
+            canvas.addEventListener('touchstart', e => {
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }, false);
+
+            canvas.addEventListener('touchend', e => {
+                touchEndX = e.changedTouches[0].screenX;
+                touchEndY = e.changedTouches[0].screenY;
+                handleSwipe();
+            }, false);
+            
+            function handleSwipe() {
+                if (changingDirection) return;
+                changingDirection = true;
+                
+                const dxSwipe = touchEndX - touchStartX;
+                const dySwipe = touchEndY - touchStartY;
+                const goingUp = dy === -GRID_SIZE;
+                const goingDown = dy === GRID_SIZE;
+                const goingRight = dx === GRID_SIZE;
+                const goingLeft = dx === -GRID_SIZE;
+
+                if (Math.abs(dxSwipe) > Math.abs(dySwipe)) { // Horizontal swipe
+                    if (dxSwipe > 0 && !goingLeft) { dx = GRID_SIZE; dy = 0; } // Right
+                    else if (dxSwipe < 0 && !goingRight) { dx = -GRID_SIZE; dy = 0; } // Left
+                } else { // Vertical swipe
+                    if (dySwipe > 0 && !goingUp) { dx = 0; dy = GRID_SIZE; } // Down
+                    else if (dySwipe < 0 && !goingDown) { dx = 0; dy = -GRID_SIZE; } // Up
+                }
+            }
+            
+            // On-screen button controls
+            document.getElementById('up-btn').addEventListener('click', () => { if (!changingDirection && dy !== GRID_SIZE) { changingDirection = true; dx = 0; dy = -GRID_SIZE; }});
+            document.getElementById('down-btn').addEventListener('click', () => { if (!changingDirection && dy !== -GRID_SIZE) { changingDirection = true; dx = 0; dy = GRID_SIZE; }});
+            document.getElementById('left-btn').addEventListener('click', () => { if (!changingDirection && dx !== GRID_SIZE) { changingDirection = true; dx = -GRID_SIZE; dy = 0; }});
+            document.getElementById('right-btn').addEventListener('click', () => { if (!changingDirection && dx !== -GRID_SIZE) { changingDirection = true; dx = GRID_SIZE; dy = 0; }});
+
+
+            // --- Event Listeners ---
+            document.addEventListener('keydown', changeDirection);
+            startButton.addEventListener('click', () => {
+                gameOverlay.style.display = 'none';
+                initializeGame();
+                main();
+            });
+        });
+    </script>
+</body>
+</html>

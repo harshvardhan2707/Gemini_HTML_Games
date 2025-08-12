@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #000;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            image-rendering: pixelated;
+        }
+        canvas {
+            background-color: #000;
+            border: 5px solid #0000FF;
+            border-radius: 10px;
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+        .ui-panel {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 560px; /* Match canvas width */
+            font-size: 1.2rem;
+            padding: 0 10px;
+        }
+        button {
+            background-color: #FFFF00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 0 4px #999900;
+            transition: all 0.1s ease-in-out;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px #999900;
+        }
+        #message {
+            font-size: 1.5rem;
+            color: #FFFF00;
+            height: 30px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h1 class="text-4xl text-yellow-400 mb-4">PAC-MAN</h1>
+        <div class="ui-panel">
+            <div id="score">SCORE: 0</div>
+            <div id="lives">LIVES: 3</div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="message">PRESS START</div>
+        <button id="startButton">Start Game</button>
+    </div>
+
+    <script>
+    // --- Basic Setup ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const messageEl = document.getElementById('message');
+    const startButton = document.getElementById('startButton');
+
+    const TILE_SIZE = 20;
+    const VELOCITY = 2;
+
+    // --- Game Map Layout ---
+    // 1: wall, 2: pellet, 3: power-up, 0: empty space, 4: ghost lair
+    const map = [
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1],
+        [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+        [1,3,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,3,1],
+        [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+        [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+        [1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1],
+        [1,2,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,2,1],
+        [1,2,2,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,2,2,1],
+        [1,1,1,1,1,1,2,1,1,1,1,1,0,1,1,0,1,1,1,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,1,1,1,0,1,1,0,1,1,1,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,0,0,0,0,0,0,0,0,0,0,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,0,1,1,1,4,4,1,1,1,0,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,0,1,4,4,4,4,4,4,1,0,1,1,2,1,1,1,1,1,1],
+        [0,0,0,0,0,0,2,0,0,0,1,4,4,4,4,4,4,1,0,0,0,2,0,0,0,0,0,0],
+        [1,1,1,1,1,1,2,1,1,0,1,4,4,4,4,4,4,1,0,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,0,0,0,0,0,0,0,0,0,0,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1],
+        [1,1,1,1,1,1,2,1,1,0,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1],
+        [1,2,2,2,2,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,2,2,2,2,1],
+        [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+        [1,2,1,1,1,1,2,1,1,1,1,1,2,1,1,2,1,1,1,1,1,2,1,1,1,1,2,1],
+        [1,3,2,2,1,1,2,2,2,2,2,2,2,0,0,2,2,2,2,2,2,2,1,1,2,2,3,1],
+        [1,1,1,2,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,2,1,1,1],
+        [1,1,1,2,1,1,2,1,1,2,1,1,1,1,1,1,1,1,2,1,1,2,1,1,2,1,1,1],
+        [1,2,2,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,1,1,2,2,2,2,2,2,1],
+        [1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1],
+        [1,2,1,1,1,1,1,1,1,1,1,1,2,1,1,2,1,1,1,1,1,1,1,1,1,1,2,1],
+        [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+    canvas.width = map[0].length * TILE_SIZE;
+    canvas.height = map.length * TILE_SIZE;
+
+    // --- Game State Variables ---
+    let score = 0;
+    let lives = 3;
+    let pacman;
+    let ghosts;
+    let pellets = [];
+    let powerUps = [];
+    let gameInterval;
+    let isGameRunning = false;
+    let frightenedMode = false;
+    let frightenedTimer;
+    let scatterMode = true;
+    let scatterTimer;
+    const SCATTER_DURATION = 7000; // 7 seconds
+    const CHASE_DURATION = 20000; // 20 seconds
+
+    // --- Player and Ghost Classes ---
+    class Player {
+        constructor({ position, velocity }) {
+            this.position = position;
+            this.velocity = velocity;
+            this.desiredVelocity = { x: 0, y: 0 }; // FIX: For smoother turning
+            this.radius = TILE_SIZE / 2 - 2;
+            this.mouthOpen = 0.75;
+            this.mouthSpeed = 0.025; // FIX: Slower mouth animation
+            this.rotation = 0;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.position.x, this.position.y);
+            ctx.rotate(this.rotation);
+            ctx.translate(-this.position.x, -this.position.y);
+
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.radius, this.mouthOpen * Math.PI, (2 - this.mouthOpen) * Math.PI);
+            ctx.lineTo(this.position.x, this.position.y);
+            ctx.fillStyle = 'yellow';
+            ctx.fill();
+            ctx.closePath();
+            ctx.restore();
+        }
+
+        update() {
+            // FIX: New movement logic for smoother turning
+            // Check if we can switch to the desired direction
+            if (this.desiredVelocity.x !== 0 || this.desiredVelocity.y !== 0) {
+                if (!checkWallCollision(this, this.desiredVelocity)) {
+                    this.velocity.x = this.desiredVelocity.x;
+                    this.velocity.y = this.desiredVelocity.y;
+                    
+                    // Update rotation only when direction actually changes
+                    if (this.velocity.x > 0) this.rotation = 0;
+                    else if (this.velocity.x < 0) this.rotation = Math.PI;
+                    else if (this.velocity.y > 0) this.rotation = Math.PI / 2;
+                    else if (this.velocity.y < 0) this.rotation = -Math.PI / 2;
+                }
+            }
+
+            // Check for collision in the current direction before moving
+            if (checkWallCollision(this, this.velocity)) {
+                this.velocity.x = 0;
+                this.velocity.y = 0;
+            }
+            
+            this.draw();
+            this.position.x += this.velocity.x;
+            this.position.y += this.velocity.y;
+
+            // Animate mouth
+            if (this.velocity.x !== 0 || this.velocity.y !== 0) {
+                 if (this.mouthOpen < 0 || this.mouthOpen > 0.75) {
+                    this.mouthSpeed = -this.mouthSpeed;
+                }
+                this.mouthOpen += this.mouthSpeed;
+            }
+
+            // Tunnel logic
+            if (this.position.x < -this.radius) {
+                this.position.x = canvas.width + this.radius;
+            } else if (this.position.x > canvas.width + this.radius) {
+                this.position.x = -this.radius;
+            }
+        }
+    }
+
+    class Ghost {
+        constructor({ position, velocity, color, name }) {
+            this.initialPosition = position;
+            this.position = { ...position };
+            this.velocity = velocity;
+            this.radius = TILE_SIZE / 2 - 2;
+            this.color = color;
+            this.name = name;
+            this.isFrightened = false;
+            this.isEaten = false;
+            this.speed = 1.5;
+            this.scatterTarget = this.getScatterTarget();
+        }
+        
+        getScatterTarget() {
+            switch(this.name) {
+                case 'Blinky': return { x: canvas.width - TILE_SIZE, y: 0 };
+                case 'Pinky': return { x: TILE_SIZE, y: 0 };
+                case 'Inky': return { x: canvas.width - TILE_SIZE, y: canvas.height - TILE_SIZE };
+                case 'Clyde': return { x: TILE_SIZE, y: canvas.height - TILE_SIZE };
+            }
+        }
+
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.radius, Math.PI, 0);
+            ctx.lineTo(this.position.x + this.radius, this.position.y + this.radius * 2);
+            ctx.lineTo(this.position.x + this.radius / 2, this.position.y + this.radius * 1.5);
+            ctx.lineTo(this.position.x, this.position.y + this.radius * 2);
+            ctx.lineTo(this.position.x - this.radius / 2, this.position.y + this.radius * 1.5);
+            ctx.lineTo(this.position.x - this.radius, this.position.y + this.radius * 2);
+            ctx.closePath();
+            
+            if (this.isFrightened) {
+                ctx.fillStyle = this.isEaten ? 'white' : '#0000FF'; // Blue when frightened, white eyes when eaten
+            } else {
+                ctx.fillStyle = this.color;
+            }
+            ctx.fill();
+
+            // Eyes
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(this.position.x - this.radius/2.5, this.position.y - this.radius/3, this.radius/3, 0, Math.PI * 2);
+            ctx.arc(this.position.x + this.radius/2.5, this.position.y - this.radius/3, this.radius/3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(this.position.x - this.radius/2.5 - this.velocity.x, this.position.y - this.radius/3 + this.velocity.y, this.radius/6, 0, Math.PI * 2);
+            ctx.arc(this.position.x + this.radius/2.5 - this.velocity.x, this.position.y - this.radius/3 + this.velocity.y, this.radius/6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        update() {
+            this.draw();
+            this.position.x += this.velocity.x;
+            this.position.y += this.velocity.y;
+        }
+        
+        reset() {
+            this.position = { ...this.initialPosition };
+            this.isFrightened = false;
+            this.isEaten = false;
+            this.speed = 1.5;
+            this.velocity = {x: 0, y: 0};
+            if(this.name === 'Blinky') this.velocity.y = -VELOCITY/2;
+        }
+    }
+
+    class Pellet {
+        constructor({ position }) {
+            this.position = position;
+            this.radius = 3;
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.closePath();
+        }
+    }
+
+    class PowerUp {
+        constructor({ position }) {
+            this.position = position;
+            this.radius = 8;
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.closePath();
+        }
+    }
+
+    // --- Game Initialization ---
+    function init() {
+        score = 0;
+        lives = 3;
+        updateUI();
+        createMapObjects();
+        
+        pacman = new Player({
+            position: { x: TILE_SIZE * 13.5, y: TILE_SIZE * 23.5 },
+            velocity: { x: 0, y: 0 }
+        });
+
+        ghosts = [
+            new Ghost({ name: 'Blinky', position: { x: TILE_SIZE * 13.5, y: TILE_SIZE * 11.5 }, velocity: { x: 0, y: -VELOCITY/2 }, color: 'red' }),
+            new Ghost({ name: 'Pinky', position: { x: TILE_SIZE * 13.5, y: TILE_SIZE * 14.5 }, velocity: { x: 0, y: 0 }, color: 'pink' }),
+            new Ghost({ name: 'Inky', position: { x: TILE_SIZE * 11.5, y: TILE_SIZE * 14.5 }, velocity: { x: 0, y: 0 }, color: 'cyan' }),
+            new Ghost({ name: 'Clyde', position: { x: TILE_SIZE * 15.5, y: TILE_SIZE * 14.5 }, velocity: { x: 0, y: 0 }, color: 'orange' })
+        ];
+
+        frightenedMode = false;
+        scatterMode = true;
+        clearTimeout(scatterTimer);
+        scatterTimer = setTimeout(switchChaseScatter, SCATTER_DURATION);
+    }
+
+    function createMapObjects() {
+        pellets = [];
+        powerUps = [];
+        map.forEach((row, i) => {
+            row.forEach((symbol, j) => {
+                const position = { x: TILE_SIZE * j + TILE_SIZE / 2, y: TILE_SIZE * i + TILE_SIZE / 2 };
+                if (symbol === 2) {
+                    pellets.push(new Pellet({ position }));
+                } else if (symbol === 3) {
+                    powerUps.push(new PowerUp({ position }));
+                }
+            });
+        });
+    }
+
+    function drawMap() {
+        map.forEach((row, i) => {
+            row.forEach((symbol, j) => {
+                if (symbol === 1) {
+                    ctx.fillStyle = '#0000FF';
+                    ctx.fillRect(j * TILE_SIZE, i * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                }
+            });
+        });
+    }
+
+    // --- Game Loop ---
+    function gameLoop() {
+        if (!isGameRunning) return;
+        gameInterval = requestAnimationFrame(gameLoop);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawMap();
+        
+        handlePellets();
+        handlePowerUps();
+
+        pacman.update();
+        handleGhosts();
+
+        checkWinCondition();
+        checkLossCondition();
+    }
+    
+    // --- Handlers ---
+    
+    function handlePellets() {
+        for (let i = pellets.length - 1; i >= 0; i--) {
+            const pellet = pellets[i];
+            pellet.draw();
+            if (Math.hypot(pellet.position.x - pacman.position.x, pellet.position.y - pacman.position.y) < pellet.radius + pacman.radius) {
+                pellets.splice(i, 1);
+                score += 10;
+                updateUI();
+            }
+        }
+    }
+
+    function handlePowerUps() {
+        for (let i = powerUps.length - 1; i >= 0; i--) {
+            const powerUp = powerUps[i];
+            powerUp.draw();
+            if (Math.hypot(powerUp.position.x - pacman.position.x, powerUp.position.y - pacman.position.y) < powerUp.radius + pacman.radius) {
+                powerUps.splice(i, 1);
+                activateFrightenedMode();
+            }
+        }
+    }
+    
+    function handleGhosts() {
+        ghosts.forEach(ghost => {
+            if (ghost.isEaten) {
+                const target = ghost.initialPosition;
+                if (Math.hypot(target.x - ghost.position.x, target.y - ghost.position.y) < TILE_SIZE) {
+                    ghost.isEaten = false;
+                    ghost.isFrightened = false;
+                    ghost.speed = 1.5;
+                } else {
+                    const pathways = getValidPathways(ghost, target);
+                    if (pathways.length > 0) {
+                        const direction = getBestPath(ghost, pathways, target);
+                        ghost.velocity.x = direction.x * ghost.speed;
+                        ghost.velocity.y = direction.y * ghost.speed;
+                    }
+                }
+            } else {
+                const pathways = getValidPathways(ghost);
+                if (pathways.length > 0) {
+                    const direction = getGhostDirection(ghost, pathways);
+                    ghost.velocity.x = direction.x;
+                    ghost.velocity.y = direction.y;
+                }
+            }
+            ghost.update();
+        });
+    }
+
+    // --- Ghost AI ---
+    function getGhostDirection(ghost, pathways) {
+        if (ghost.isFrightened) {
+            return pathways[Math.floor(Math.random() * pathways.length)];
+        }
+        
+        let target;
+        if (scatterMode) {
+            target = ghost.scatterTarget;
+        } else {
+            // Chase Mode Targeting
+            switch(ghost.name) {
+                case 'Blinky': target = pacman.position; break;
+                case 'Pinky':
+                    target = {
+                        x: pacman.position.x + pacman.velocity.x * 4 * (TILE_SIZE / VELOCITY),
+                        y: pacman.position.y + pacman.velocity.y * 4 * (TILE_SIZE / VELOCITY)
+                    };
+                    break;
+                case 'Inky':
+                    const blinky = ghosts.find(g => g.name === 'Blinky');
+                    const pivot = {
+                        x: pacman.position.x + pacman.velocity.x * 2 * (TILE_SIZE / VELOCITY),
+                        y: pacman.position.y + pacman.velocity.y * 2 * (TILE_SIZE / VELOCITY)
+                    };
+                    target = {
+                        x: pivot.x + (pivot.x - blinky.position.x),
+                        y: pivot.y + (pivot.y - blinky.position.y)
+                    };
+                    break;
+                case 'Clyde':
+                    const distance = Math.hypot(ghost.position.x - pacman.position.x, ghost.position.y - pacman.position.y);
+                    target = (distance > TILE_SIZE * 8) ? pacman.position : ghost.scatterTarget;
+                    break;
+            }
+        }
+        return getBestPath(ghost, pathways, target);
+    }
+
+    function getBestPath(ghost, pathways, target) {
+        let bestPath = null;
+        let minDistance = Infinity;
+
+        for (const path of pathways) {
+            const newPos = { x: ghost.position.x + path.x, y: ghost.position.y + path.y };
+            const distance = Math.hypot(newPos.x - target.x, newPos.y - target.y);
+            if (distance < minDistance) {
+                minDistance = distance;
+                bestPath = path;
+            }
+        }
+        return bestPath;
+    }
+
+    function getValidPathways(ghost) {
+        const pathways = [];
+        const possibleMoves = [
+            { x: ghost.speed, y: 0 },  // right
+            { x: -ghost.speed, y: 0 }, // left
+            { x: 0, y: ghost.speed },  // down
+            { x: 0, y: -ghost.speed }  // up
+        ];
+
+        for (const move of possibleMoves) {
+            // Prevent reversing direction unless at a dead end
+            if (move.x === -ghost.velocity.x && move.y === -ghost.velocity.y) {
+                continue;
+            }
+            if (!checkWallCollision(ghost, move)) {
+                pathways.push(move);
+            }
+        }
+        
+        if (pathways.length === 0) {
+             pathways.push({x: -ghost.velocity.x, y: -ghost.velocity.y});
+        }
+        
+        return pathways;
+    }
+
+    // --- Collision Detection ---
+    // FIX: New, more accurate grid-based collision detection
+    function checkWallCollision(entity, velocity) {
+        const checkPoints = [
+            { x: entity.position.x - entity.radius + velocity.x, y: entity.position.y - entity.radius + velocity.y },
+            { x: entity.position.x + entity.radius - 1 + velocity.x, y: entity.position.y - entity.radius + velocity.y },
+            { x: entity.position.x - entity.radius + velocity.x, y: entity.position.y + entity.radius - 1 + velocity.y },
+            { x: entity.position.x + entity.radius - 1 + velocity.x, y: entity.position.y + entity.radius - 1 + velocity.y }
+        ];
+
+        for (const point of checkPoints) {
+            const mapCol = Math.floor(point.x / TILE_SIZE);
+            const mapRow = Math.floor(point.y / TILE_SIZE);
+
+            const tile = map[mapRow] && map[mapRow][mapCol];
+            if (tile === 1 || (tile === 4 && entity instanceof Player)) {
+                return true; // Collision detected
+            }
+        }
+        return false; // No collision
+    }
+    
+    function checkLossCondition() {
+        for (const ghost of ghosts) {
+            if (Math.hypot(pacman.position.x - ghost.position.x, pacman.position.y - ghost.position.y) < pacman.radius + ghost.radius) {
+                if (ghost.isFrightened && !ghost.isEaten) {
+                    ghost.isEaten = true;
+                    score += 200;
+                    updateUI();
+                    ghost.speed = 3; 
+                } else if (!ghost.isFrightened && !ghost.isEaten) {
+                    loseLife();
+                    return;
+                }
+            }
+        }
+    }
+
+    function checkWinCondition() {
+        if (pellets.length === 0) {
+            endGame("YOU WIN!");
+        }
+    }
+
+    // --- Game State Management ---
+    function startGame() {
+        if (isGameRunning) return;
+        isGameRunning = true;
+        messageEl.textContent = "";
+        init();
+        gameLoop();
+    }
+
+    function endGame(message) {
+        isGameRunning = false;
+        cancelAnimationFrame(gameInterval);
+        clearTimeout(frightenedTimer);
+        clearTimeout(scatterTimer);
+        messageEl.textContent = message;
+    }
+
+    function loseLife() {
+        lives--;
+        isGameRunning = false;
+        cancelAnimationFrame(gameInterval);
+        updateUI();
+        if (lives <= 0) {
+            endGame("GAME OVER");
+        } else {
+            setTimeout(() => {
+                resetPositions();
+                isGameRunning = true;
+                gameLoop();
+            }, 1500);
+        }
+    }
+    
+    function resetPositions() {
+        pacman.position = { x: TILE_SIZE * 13.5, y: TILE_SIZE * 23.5 };
+        pacman.velocity = { x: 0, y: 0 };
+        pacman.desiredVelocity = { x: 0, y: 0 };
+        ghosts.forEach(ghost => ghost.reset());
+    }
+
+    function activateFrightenedMode() {
+        frightenedMode = true;
+        clearTimeout(frightenedTimer);
+        ghosts.forEach(ghost => {
+            if (!ghost.isEaten) {
+                ghost.isFrightened = true;
+                ghost.speed = 1;
+                ghost.velocity.x *= -1;
+                ghost.velocity.y *= -1;
+            }
+        });
+        frightenedTimer = setTimeout(() => {
+            frightenedMode = false;
+            ghosts.forEach(ghost => {
+                ghost.isFrightened = false;
+                ghost.speed = 1.5;
+            });
+        }, 8000);
+    }
+    
+    function switchChaseScatter() {
+        scatterMode = !scatterMode;
+        const duration = scatterMode ? SCATTER_DURATION : CHASE_DURATION;
+        
+        ghosts.forEach(ghost => {
+            if (!ghost.isEaten && !ghost.isFrightened) {
+                ghost.velocity.x *= -1;
+                ghost.velocity.y *= -1;
+            }
+        });
+        
+        clearTimeout(scatterTimer);
+        scatterTimer = setTimeout(switchChaseScatter, duration);
+    }
+
+    function updateUI() {
+        scoreEl.textContent = `SCORE: ${score}`;
+        livesEl.textContent = `LIVES: ${lives}`;
+    }
+
+    // --- Event Listeners ---
+    startButton.addEventListener('click', startGame);
+
+    // FIX: Input handling now sets a "desired" velocity for smoother turning
+    window.addEventListener('keydown', (e) => {
+        if (!isGameRunning) return;
+        switch (e.key) {
+            case 'ArrowUp': case 'w':
+                pacman.desiredVelocity = { x: 0, y: -VELOCITY };
+                break;
+            case 'ArrowDown': case 's':
+                pacman.desiredVelocity = { x: 0, y: VELOCITY };
+                break;
+            case 'ArrowLeft': case 'a':
+                pacman.desiredVelocity = { x: -VELOCITY, y: 0 };
+                break;
+            case 'ArrowRight': case 'd':
+                pacman.desiredVelocity = { x: VELOCITY, y: 0 };
+                break;
+        }
+    });
+    
+    // --- Initial Draw ---
+    function initialDraw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        createMapObjects();
+        drawMap();
+        pellets.forEach(p => p.draw());
+        powerUps.forEach(p => p.draw());
+        new Player({
+            position: { x: TILE_SIZE * 13.5, y: TILE_SIZE * 23.5 },
+            velocity: { x: 0, y: 0 }
+        }).draw();
+        [
+            new Ghost({ name: 'Blinky', position: { x: TILE_SIZE * 13.5, y: TILE_SIZE * 11.5 }, velocity: { x: 0, y: 0 }, color: 'red' }),
+            new Ghost({ name: 'Pinky', position: { x: TILE_SIZE * 13.5, y: TILE_SIZE * 14.5 }, velocity: { x: 0, y: 0 }, color: 'pink' }),
+            new Ghost({ name: 'Inky', position: { x: TILE_SIZE * 11.5, y: TILE_SIZE * 14.5 }, velocity: { x: 0, y: 0 }, color: 'cyan' }),
+            new Ghost({ name: 'Clyde', position: { x: TILE_SIZE * 15.5, y: TILE_SIZE * 14.5 }, velocity: { x: 0, y: 0 }, color: 'orange' })
+        ].forEach(g => g.draw());
+    }
+    
+    window.onload = initialDraw;
+
+    </script>
+</body>
+</html>

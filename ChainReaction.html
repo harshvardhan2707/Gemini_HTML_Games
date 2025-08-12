@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chain Reaction</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cell-size: min(10vw, 50px);
+            --bg-color: #1a1a2e;
+            --grid-bg: #16213e;
+            --text-color: #e94560;
+            --border-color: #0f3460;
+            --player-colors: #ff4757, #2ed573, #1e90ff, #ffa502, #f368e0, #ff9f43, #5352ed, #70a1ff;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        #setup-screen {
+            background-color: var(--grid-bg);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 2px solid var(--border-color);
+            animation: fadeIn 0.5s ease-out;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #setup-screen h1 {
+            color: var(--text-color);
+            margin-top: 0;
+            margin-bottom: 0;
+        }
+
+        .setup-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .setup-option label {
+            font-size: 1.2rem;
+            margin-right: 15px;
+        }
+
+        .setup-option select {
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-color);
+            color: white;
+            font-size: 1rem;
+            min-width: 120px;
+        }
+
+        #start-game-btn {
+            background-color: var(--text-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+
+        #start-game-btn:hover {
+            background-color: #d63031;
+            transform: translateY(-2px);
+        }
+
+        #game-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        
+        #player-info {
+            width: 100%;
+            max-width: fit-content;
+            padding: 10px 20px;
+            margin-bottom: 15px;
+            background-color: var(--grid-bg);
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 600;
+            transition: color 0.5s, box-shadow 0.5s;
+            border: 2px solid var(--border-color);
+        }
+
+        #game-grid {
+            display: grid;
+            gap: 4px;
+            background-color: var(--border-color);
+            padding: 4px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            transition: background-color 0.5s ease;
+        }
+
+        .cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background-color: var(--grid-bg);
+            border-radius: 5px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .cell:hover {
+            background-color: #2c3e50;
+        }
+
+        .orb {
+            position: absolute;
+            width: 30%;
+            height: 30%;
+            border-radius: 50%;
+            transition: transform 0.3s ease-out, background-color 0.3s;
+            animation: popIn 0.3s ease;
+        }
+
+        .orb.p1 { background-color: #ff4757; }
+        .orb.p2 { background-color: #2ed573; }
+        .orb.p3 { background-color: #1e90ff; }
+        .orb.p4 { background-color: #ffa502; }
+        .orb.p5 { background-color: #f368e0; }
+        .orb.p6 { background-color: #ff9f43; }
+        .orb.p7 { background-color: #5352ed; }
+        .orb.p8 { background-color: #70a1ff; }
+
+        /* Orb positioning for 1, 2, and 3 orbs */
+        .orb-count-1 .orb:nth-child(1) { top: 35%; left: 35%; }
+        
+        .orb-count-2 .orb:nth-child(1) { top: 20%; left: 20%; transform: rotate(-45deg); }
+        .orb-count-2 .orb:nth-child(2) { top: 50%; left: 50%; transform: rotate(45deg); }
+        
+        .orb-count-3 .orb:nth-child(1) { top: 20%; left: 35%; }
+        .orb-count-3 .orb:nth-child(2) { top: 50%; left: 15%; }
+        .orb-count-3 .orb:nth-child(3) { top: 50%; left: 55%; }
+
+        #message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            background-color: rgba(22, 33, 62, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+            border: 2px solid var(--text-color);
+            box-shadow: 0 0 50px rgba(233, 69, 96, 0.5);
+            animation: fadeIn 0.3s forwards;
+        }
+        
+        #message-box h2 {
+            margin: 0;
+            font-size: 2rem;
+            color: var(--text-color);
+        }
+
+        #message-box button {
+            background-color: var(--text-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        #message-box button:hover {
+            background-color: #d63031;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+        
+        @keyframes explode {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <!-- Setup Screen -->
+        <div id="setup-screen">
+            <h1>Chain Reaction</h1>
+            <div class="setup-option">
+                <label for="player-count">Players:</label>
+                <select id="player-count">
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                </select>
+            </div>
+             <div class="setup-option">
+                <label for="row-count">Rows:</label>
+                <select id="row-count"></select>
+            </div>
+             <div class="setup-option">
+                <label for="col-count">Columns:</label>
+                <select id="col-count"></select>
+            </div>
+            <button id="start-game-btn">Start Game</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen">
+            <div id="player-info">Player 1's Turn</div>
+            <div id="game-grid"></div>
+        </div>
+    </div>
+    
+    <!-- Message Box for Winner -->
+    <div id="message-box">
+        <h2 id="winner-message"></h2>
+        <button id="play-again-btn">Play Again</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const setupScreen = document.getElementById('setup-screen');
+            const gameScreen = document.getElementById('game-screen');
+            const playerCountSelect = document.getElementById('player-count');
+            const rowCountSelect = document.getElementById('row-count');
+            const colCountSelect = document.getElementById('col-count');
+            const startGameBtn = document.getElementById('start-game-btn');
+            const gameGrid = document.getElementById('game-grid');
+            const playerInfo = document.getElementById('player-info');
+            const messageBox = document.getElementById('message-box');
+            const winnerMessage = document.getElementById('winner-message');
+            const playAgainBtn = document.getElementById('play-again-btn');
+
+            // Game State
+            let numPlayers = 2;
+            let numRows = 8;
+            let numCols = 8;
+            let currentPlayer = 1;
+            let playerColors = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502', '#f368e0', '#ff9f43', '#5352ed', '#70a1ff'];
+            let gridState = [];
+            let isAnimating = false;
+            let turnCount = 0;
+
+            // --- Initial UI Setup ---
+            function populateSelect(selectElement, min, max, initial) {
+                for (let i = min; i <= max; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = i;
+                    if (i === initial) {
+                        option.selected = true;
+                    }
+                    selectElement.appendChild(option);
+                }
+            }
+            populateSelect(rowCountSelect, 5, 13, 8);
+            populateSelect(colCountSelect, 5, 13, 8);
+
+
+            // --- Game Setup ---
+            
+            startGameBtn.addEventListener('click', () => {
+                numPlayers = parseInt(playerCountSelect.value);
+                numRows = parseInt(rowCountSelect.value);
+                numCols = parseInt(colCountSelect.value);
+                setupScreen.style.display = 'none';
+                gameScreen.style.display = 'flex';
+                initializeGame();
+            });
+
+            playAgainBtn.addEventListener('click', () => {
+                messageBox.style.display = 'none';
+                gameScreen.style.display = 'none';
+                setupScreen.style.display = 'flex';
+            });
+
+            function initializeGame() {
+                // Reset game state
+                currentPlayer = 1;
+                isAnimating = false;
+                turnCount = 0;
+                
+                // Set grid styles dynamically
+                gameGrid.style.gridTemplateColumns = `repeat(${numCols}, var(--cell-size))`;
+                gameGrid.style.gridTemplateRows = `repeat(${numRows}, var(--cell-size))`;
+                gameGrid.style.backgroundColor = 'var(--border-color)';
+
+
+                // Initialize grid state
+                gridState = Array(numRows).fill(null).map(() => Array(numCols).fill(null).map(() => ({
+                    player: 0,
+                    orbs: 0,
+                    capacity: 0
+                })));
+
+                // Create grid cells in the DOM
+                gameGrid.innerHTML = '';
+                for (let row = 0; row < numRows; row++) {
+                    for (let col = 0; col < numCols; col++) {
+                        const cell = document.createElement('div');
+                        cell.classList.add('cell');
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+
+                        // Determine cell capacity
+                        let capacity = 4;
+                        if ((row === 0 || row === numRows - 1) && (col === 0 || col === numCols - 1)) {
+                            capacity = 2; // Corner
+                        } else if (row === 0 || row === numRows - 1 || col === 0 || col === numCols - 1) {
+                            capacity = 3; // Edge
+                        }
+                        gridState[row][col].capacity = capacity;
+                        
+                        cell.addEventListener('click', () => handleCellClick(row, col));
+                        gameGrid.appendChild(cell);
+                    }
+                }
+                updatePlayerInfo();
+            }
+
+            // --- Game Logic ---
+
+            async function handleCellClick(row, col) {
+                if (isAnimating) return; // Prevent clicks during animation
+
+                const cellState = gridState[row][col];
+
+                // Allow click only if the cell is empty or belongs to the current player
+                if (cellState.player === 0 || cellState.player === currentPlayer) {
+                    isAnimating = true; // Lock interactions for the duration of the turn
+                    turnCount++;
+
+                    await addOrb(row, col, currentPlayer);
+
+                    // After all chain reactions are complete, check for a winner
+                    const winnerFound = checkWinner();
+                    
+                    if (!winnerFound) {
+                        nextTurn();
+                        isAnimating = false; // Unlock for the next player
+                    }
+                    // If a winner is found, the board remains locked.
+                }
+            }
+
+            async function addOrb(row, col, player) {
+                const cellState = gridState[row][col];
+                cellState.player = player;
+                cellState.orbs++;
+
+                updateCell(row, col);
+
+                if (cellState.orbs >= cellState.capacity) {
+                    await explodeCell(row, col, player);
+                }
+            }
+            
+            async function explodeCell(row, col, player) {
+                const cellState = gridState[row][col];
+                cellState.orbs = 0;
+                cellState.player = 0;
+                updateCell(row, col); // Clear the exploding cell visually
+            
+                const neighbors = [
+                    { r: row - 1, c: col },
+                    { r: row + 1, c: col },
+                    { r: row, c: col - 1 },
+                    { r: row, c: col + 1 }
+                ];
+            
+                // A short delay for the animation to look like it's spreading
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                const promises = neighbors
+                    .filter(n => n.r >= 0 && n.r < numRows && n.c >= 0 && n.c < numCols)
+                    .map(n => addOrb(n.r, n.c, player));
+
+                await Promise.all(promises);
+            }
+            
+            function nextTurn() {
+                const playersOnBoard = new Set();
+                gridState.flat().forEach(cell => {
+                    if (cell.player > 0) {
+                        playersOnBoard.add(cell.player);
+                    }
+                });
+
+                // This check is a safeguard. The game should end via checkWinner.
+                if (playersOnBoard.size < 2 && turnCount > numPlayers -1) {
+                    return;
+                }
+
+                let nextPlayer = currentPlayer;
+                // Loop until we find the next player in sequence who is still on the board.
+                do {
+                    nextPlayer = (nextPlayer % numPlayers) + 1;
+                } while (turnCount > numPlayers -1 && !playersOnBoard.has(nextPlayer) && playersOnBoard.size > 1);
+                
+                currentPlayer = nextPlayer;
+                updatePlayerInfo();
+            }
+            
+            function checkWinner() {
+                // A winner is decided only after each player has had a turn and only one player remains.
+                if (turnCount < numPlayers) return false;
+
+                const playersWithOrbs = new Set();
+                gridState.flat().forEach(cell => {
+                    if (cell.player > 0) {
+                        playersWithOrbs.add(cell.player);
+                    }
+                });
+                
+                if (playersWithOrbs.size === 1) {
+                    const winner = playersWithOrbs.values().next().value;
+                    showWinner(winner);
+                    return true;
+                }
+                return false;
+            }
+
+            // --- UI Updates ---
+
+            function updateCell(row, col) {
+                const cellElement = document.querySelector(`[data-row='${row}'][data-col='${col}']`);
+                const cellState = gridState[row][col];
+                
+                cellElement.innerHTML = ''; // Clear previous orbs
+                cellElement.className = 'cell'; // Reset class
+                
+                if (cellState.orbs > 0) {
+                    cellElement.classList.add(`orb-count-${cellState.orbs}`);
+                    for (let i = 0; i < cellState.orbs; i++) {
+                        const orb = document.createElement('div');
+                        orb.classList.add('orb', `p${cellState.player}`);
+                        cellElement.appendChild(orb);
+                    }
+                }
+            }
+
+            function updatePlayerInfo() {
+                playerInfo.textContent = `Player ${currentPlayer}'s Turn`;
+                playerInfo.style.color = playerColors[currentPlayer - 1];
+                playerInfo.style.boxShadow = `0 0 15px ${playerColors[currentPlayer - 1]}`;
+                gameGrid.style.backgroundColor = playerColors[currentPlayer - 1];
+            }
+
+            function showWinner(player) {
+                winnerMessage.textContent = `Player ${player} Wins!`;
+                winnerMessage.style.color = playerColors[player - 1];
+                messageBox.style.display = 'flex';
+            }
+        });
+    </script>
+</body>
+</html>
